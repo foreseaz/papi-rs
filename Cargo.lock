@@ -957,6 +957,7 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "listenfd",
+ "num_cpus",
 ]
 
 [[package]]

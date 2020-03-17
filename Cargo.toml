@@ -10,3 +10,5 @@ edition = "2018"
 actix-web = "2.0"
 actix-rt = "1.0"
 listenfd = "0.3"
+num_cpus = "1.0"
+
