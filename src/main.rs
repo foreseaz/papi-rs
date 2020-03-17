@@ -1,6 +1,7 @@
 use actix_web::{web, guard, App, HttpResponse, HttpServer, Responder};
 use listenfd::ListenFd; // listen to the socket of systemfd
 use std::sync::Mutex;
+use std::time::Duration;
 extern crate num_cpus;
 
 struct AppState {
@@ -13,6 +14,9 @@ struct AppState {
 async fn count(data: web::Data<AppState>) -> String {
     let mut counter = data.counter.lock().unwrap(); // get counter's MutexGuard
     *counter += 1; // access counter inside MutexGuard
+
+    // std::thread::sleep(Duration::from_secs(10)); // bad practice, thread is blocking
+    tokio::time::delay_for(Duration::from_secs(10)).await;
 
     format!("mutex counter: {}", counter)
 }
@@ -40,7 +44,7 @@ async fn api_index() -> impl Responder {
 fn api_test(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("/count")
-            .guard(guard::Header("Host", "localhost:3001"))
+            .guard(guard::Header("Host", "localhost:3000"))
             .route(web::get().to(count))
     );
 }
@@ -74,7 +78,8 @@ async fn main() -> std::io::Result<()> {
                     .configure(api_test)
                     .configure(api_hello)
             )
-    });
+    })
+    .workers(1); // start with 4 workers, but in same thread
 
     server = if let Some(l) = listenfd.take_tcp_listener(0).unwrap() {
         server.listen(l)?
