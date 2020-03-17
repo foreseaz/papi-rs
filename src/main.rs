@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, guard, App, HttpResponse, HttpServer, Responder};
 use listenfd::ListenFd; // listen to the socket of systemfd
 use std::sync::Mutex;
 extern crate num_cpus;
@@ -36,6 +36,23 @@ async fn api_index() -> impl Responder {
     HttpResponse::Ok().body("API index here!")
 }
 
+// config for api
+fn api_test(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::resource("/count")
+            .guard(guard::Header("Host", "localhost:3001"))
+            .route(web::get().to(count))
+    );
+}
+
+// config for api
+fn api_hello(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::resource("/hello")
+            .route(web::get().to(index2))
+    );
+}
+
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     let mut listenfd = ListenFd::from_env();
@@ -49,11 +66,13 @@ async fn main() -> std::io::Result<()> {
                 physical_cpus: num_cpus::get_physical(),
             })
             .route("/", web::get().to(index))
-            .route("/api", web::get().to(api_index))
             .service(
                 web::scope("/api")
-                    .route("/count", web::get().to(count))
-                    .route("/hello", web::get().to(index2)),
+                    // other guards https://docs.rs/actix-web/2.0.0/actix_web/guard/index.html#functions
+                    .guard(guard::Header("Host", "localhost:3000"))
+                    .route("", web::get().to(api_index))
+                    .configure(api_test)
+                    .configure(api_hello)
             )
     });
 
