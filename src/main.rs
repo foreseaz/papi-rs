@@ -1,7 +1,9 @@
-use actix_web::{web, guard, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, guard, App, HttpRequest, HttpResponse, HttpServer, Responder, Error};
 use listenfd::ListenFd; // listen to the socket of systemfd
+use serde::{Serialize};
 use std::sync::Mutex;
 use std::time::Duration;
+use futures::future::{ready, Ready};
 extern crate num_cpus;
 
 struct AppState {
@@ -31,7 +33,7 @@ async fn index(data: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok().body(response)
 }
 
-async fn index2() -> impl Responder {
+async fn hello() -> impl Responder {
     HttpResponse::Ok().body("Hello world again!")
 }
 
@@ -53,8 +55,39 @@ fn api_test(cfg: &mut web::ServiceConfig) {
 fn api_hello(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("/hello")
-            .route(web::get().to(index2))
+            .route(web::get().to(hello))
     );
+}
+
+// config for user api
+fn api_user(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::resource("/user")
+            .route(web::get().to(user_json_sample))
+    );
+}
+
+#[derive(Serialize)]
+struct MyObj {
+    name: &'static str,
+}
+
+impl Responder for MyObj {
+    type Error = Error;
+    type Future = Ready<Result<HttpResponse, Error>>;
+
+    fn respond_to(self, _req: &HttpRequest) -> Self::Future {
+        let body = serde_json::to_string(&self).unwrap();
+
+        // create response and set content-type
+        ready(Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(body)))
+    }
+}
+
+async fn user_json_sample() -> impl Responder {
+    MyObj { name: "chenxi" }
 }
 
 #[actix_rt::main]
@@ -77,9 +110,11 @@ async fn main() -> std::io::Result<()> {
                     .route("", web::get().to(api_index))
                     .configure(api_test)
                     .configure(api_hello)
+                    .configure(api_user)
             )
     })
-    .workers(1); // start with 4 workers, but in same thread
+    .keep_alive(75) // set keep-alive to 75 seconds
+    .workers(4); // start with 4 workers, but in same thread
 
     server = if let Some(l) = listenfd.take_tcp_listener(0).unwrap() {
         server.listen(l)?
